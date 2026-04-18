@@ -157,6 +157,31 @@ const osThreadAttr_t TaskAnalogIn_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for qTraceExecution */
+osMessageQueueId_t qTraceExecutionHandle;
+const osMessageQueueAttr_t qTraceExecution_attributes = {
+  .name = "qTraceExecution"
+};
+/* Definitions for qRadioTx */
+osMessageQueueId_t qRadioTxHandle;
+const osMessageQueueAttr_t qRadioTx_attributes = {
+  .name = "qRadioTx"
+};
+/* Definitions for qRadioRx */
+osMessageQueueId_t qRadioRxHandle;
+const osMessageQueueAttr_t qRadioRx_attributes = {
+  .name = "qRadioRx"
+};
+/* Definitions for qRadioFwd */
+osMessageQueueId_t qRadioFwdHandle;
+const osMessageQueueAttr_t qRadioFwd_attributes = {
+  .name = "qRadioFwd"
+};
+/* Definitions for mutxRadioTx */
+osMutexId_t mutxRadioTxHandle;
+const osMutexAttr_t mutxRadioTx_attributes = {
+  .name = "mutxRadioTx"
+};
 /* Definitions for EvtMeasurementStart */
 osEventFlagsId_t EvtMeasurementStartHandle;
 const osEventFlagsAttr_t EvtMeasurementStart_attributes = {
@@ -279,6 +304,9 @@ int main(void)
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of mutxRadioTx */
+  mutxRadioTxHandle = osMutexNew(&mutxRadioTx_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
 	/* add mutexes, ... */
@@ -291,6 +319,19 @@ int main(void)
   /* USER CODE BEGIN RTOS_TIMERS */
 	/* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
+
+  /* Create the queue(s) */
+  /* creation of qTraceExecution */
+  qTraceExecutionHandle = osMessageQueueNew (200, sizeof(uint32_t), &qTraceExecution_attributes);
+
+  /* creation of qRadioTx */
+  qRadioTxHandle = osMessageQueueNew (100, sizeof(uint32_t), &qRadioTx_attributes);
+
+  /* creation of qRadioRx */
+  qRadioRxHandle = osMessageQueueNew (100, sizeof(uint32_t), &qRadioRx_attributes);
+
+  /* creation of qRadioFwd */
+  qRadioFwdHandle = osMessageQueueNew (100, sizeof(uint32_t), &qRadioFwd_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
 	/* add queues, ... */
@@ -343,7 +384,6 @@ int main(void)
 	/* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
-  /* Create the event(s) */
   /* creation of EvtMeasurementStart */
   EvtMeasurementStartHandle = osEventFlagsNew(&EvtMeasurementStart_attributes);
 
@@ -880,13 +920,14 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument) {
-	/* USER CODE BEGIN 5 */
+void StartDefaultTask(void *argument)
+{
+  /* USER CODE BEGIN 5 */
 	/* Infinite loop */
 	for (;;) {
 		osDelay(100);
 	}
-	/* USER CODE END 5 */
+  /* USER CODE END 5 */
 }
 
 /* USER CODE BEGIN Header_StartTaskBlinky */
@@ -985,8 +1026,9 @@ void StartTaskRadioComms(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartTaskWaitForTrigg */
-void StartTaskWaitForTrigg(void *argument) {
-	/* USER CODE BEGIN StartTaskWaitForTrigg */
+void StartTaskWaitForTrigg(void *argument)
+{
+  /* USER CODE BEGIN StartTaskWaitForTrigg */
 	/* Infinite loop */
 	for (;;) {
 		// rezult = osEventFlagsWait(EvtMeasurementDoneHandle, 0x7fffFFFF, osFlagsWaitAny, osWaitForever);
@@ -999,7 +1041,7 @@ void StartTaskWaitForTrigg(void *argument) {
 		// }
 		osDelay(10);
 	}
-	/* USER CODE END StartTaskWaitForTrigg */
+  /* USER CODE END StartTaskWaitForTrigg */
 }
 
 /* USER CODE BEGIN Header_d3start */
