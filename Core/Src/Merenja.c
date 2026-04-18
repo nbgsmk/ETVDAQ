@@ -19,7 +19,7 @@ CurMerenja_t curMerenja;
 CurMerenja_t get() {
 	return curMerenja;
 }
-osStatus_t setDigital(uint32_t arg) {
+osStatus_t setDigitalResult(uint32_t arg) {
 	osStatus_t rez = osMutexAcquire(mutexMerenjaHandle, structTimeout);
 	if (rez == osOK) {
 		curMerenja.timeStamp = getTimestamp();
@@ -30,7 +30,11 @@ osStatus_t setDigital(uint32_t arg) {
 	}
 }
 
-osStatus_t setAnalog(uint8_t position, uint32_t arg) {
+uint32_t getDigitalResult() {
+	return curMerenja.digitalIO;
+}
+
+osStatus_t setAnalogResult(uint8_t position, uint32_t arg) {
 	osStatus_t rez = osMutexAcquire(mutexMerenjaHandle, structTimeout);
 	if (rez == osOK) {
 		curMerenja.timeStamp = getTimestamp();

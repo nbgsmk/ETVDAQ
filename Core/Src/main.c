@@ -22,6 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdbool.h>
 #include <sys/stat.h>
 #include "Merenja.h"
 #include "DAQ_Config.h"
@@ -65,38 +66,38 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for taskBlinky */
-osThreadId_t taskBlinkyHandle;
-const osThreadAttr_t taskBlinky_attributes = {
-  .name = "taskBlinky",
+/* Definitions for TaskBlinky */
+osThreadId_t TaskBlinkyHandle;
+const osThreadAttr_t TaskBlinky_attributes = {
+  .name = "TaskBlinky",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for taskTrace */
-osThreadId_t taskTraceHandle;
-const osThreadAttr_t taskTrace_attributes = {
-  .name = "taskTrace",
+/* Definitions for TaskTrace */
+osThreadId_t TaskTraceHandle;
+const osThreadAttr_t TaskTrace_attributes = {
+  .name = "TaskTrace",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for taskDispecer */
-osThreadId_t taskDispecerHandle;
-const osThreadAttr_t taskDispecer_attributes = {
-  .name = "taskDispecer",
+/* Definitions for TaskDispecer */
+osThreadId_t TaskDispecerHandle;
+const osThreadAttr_t TaskDispecer_attributes = {
+  .name = "TaskDispecer",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for taskRadioComms */
-osThreadId_t taskRadioCommsHandle;
-const osThreadAttr_t taskRadioComms_attributes = {
-  .name = "taskRadioComms",
+/* Definitions for TaskRadioComms */
+osThreadId_t TaskRadioCommsHandle;
+const osThreadAttr_t TaskRadioComms_attributes = {
+  .name = "TaskRadioComms",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for d2 */
-osThreadId_t d2Handle;
-const osThreadAttr_t d2_attributes = {
-  .name = "d2",
+/* Definitions for TaskWaitForTrigg */
+osThreadId_t TaskWaitForTriggHandle;
+const osThreadAttr_t TaskWaitForTrigg_attributes = {
+  .name = "TaskWaitForTrigg",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
@@ -128,37 +129,73 @@ const osThreadAttr_t d6_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for taskHwI2c */
-osThreadId_t taskHwI2cHandle;
-const osThreadAttr_t taskHwI2c_attributes = {
-  .name = "taskHwI2c",
+/* Definitions for TaskHwi2c */
+osThreadId_t TaskHwi2cHandle;
+const osThreadAttr_t TaskHwi2c_attributes = {
+  .name = "TaskHwi2c",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for taskHwSpi */
-osThreadId_t taskHwSpiHandle;
-const osThreadAttr_t taskHwSpi_attributes = {
-  .name = "taskHwSpi",
+/* Definitions for TaskHwSpi */
+osThreadId_t TaskHwSpiHandle;
+const osThreadAttr_t TaskHwSpi_attributes = {
+  .name = "TaskHwSpi",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for taskDigitalIn */
-osThreadId_t taskDigitalInHandle;
-const osThreadAttr_t taskDigitalIn_attributes = {
-  .name = "taskDigitalIn",
+/* Definitions for TaskDigitalIn */
+osThreadId_t TaskDigitalInHandle;
+const osThreadAttr_t TaskDigitalIn_attributes = {
+  .name = "TaskDigitalIn",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for taskAnalogIn */
-osThreadId_t taskAnalogInHandle;
-const osThreadAttr_t taskAnalogIn_attributes = {
-  .name = "taskAnalogIn",
+/* Definitions for TaskAnalogIn */
+osThreadId_t TaskAnalogInHandle;
+const osThreadAttr_t TaskAnalogIn_attributes = {
+  .name = "TaskAnalogIn",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for EvtMeasurementStart */
+osEventFlagsId_t EvtMeasurementStartHandle;
+const osEventFlagsAttr_t EvtMeasurementStart_attributes = {
+  .name = "EvtMeasurementStart"
+};
+/* Definitions for EvtMeasurementDone */
+osEventFlagsId_t EvtMeasurementDoneHandle;
+const osEventFlagsAttr_t EvtMeasurementDone_attributes = {
+  .name = "EvtMeasurementDone"
+};
+/* Definitions for EvtSpare1 */
+osEventFlagsId_t EvtSpare1Handle;
+const osEventFlagsAttr_t EvtSpare1_attributes = {
+  .name = "EvtSpare1"
+};
+/* Definitions for EvtSpare2 */
+osEventFlagsId_t EvtSpare2Handle;
+const osEventFlagsAttr_t EvtSpare2_attributes = {
+  .name = "EvtSpare2"
 };
 /* USER CODE BEGIN PV */
 
-#define flg_ADC_DONE 0x1000
+// maksimalni flegovi
+uint32_t flg_MAX = 0x7FFFFFFFU;
+// ovi se salju dispeceru
+#define flg_DIGITAL_IRQ					0x0000'0000'00000001			// EXTI callback: digitalni ulaz se promenio
+#define flg_DIGITAL_REQUEST				0x0000'0000'00000010			// neki task zahteva ocitavanje digitalnih ulaza
+#define flg_DIGITAL_PROCESSING_DONE		0x0000'0000'00000100			// svi digitalni pinovi procitani i spremni za slanje
+#define flg_DIGITAL_TRIGGERED			0x0000'0000'00001000			// svi digitalni pinovi procitani i spremni za slanje
+
+#define flg_ADC_CONV_CPLT_IRQ			0x0000'0000'00010010			// ADC IRQ callback: zavrsena adc konverzija u pozadini i DMA je obavio svoje
+#define flg_ADC_REQUEST					0x0000'0000'00100000			// neki task zahteva adc konverziju
+#define flg_ANALOG_PROCESSING_DONE		0x0000'0000'01000000			// zavrsena analogna merenja ali ni jedan threshold nije prekoracen
+#define flg_ANALOG_TRIGGERED			0x0000'0000'10000000			// zavrsena analogna merenja i neka vrednost je prekoracena
+#define evtflg_SPARE1_TRIGGER			0x
+#define evtflg_SPARE2_TRIGGER			0x
+#define evtflg_SPARE3_TRIGGER			0x
+#define evtflg_SPARE4_TRIGGER			0x
+
 
 /* USER CODE END PV */
 
@@ -175,19 +212,19 @@ static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USB_OTG_FS_USB_Init(void);
 void StartDefaultTask(void *argument);
-void Blinky_start(void *argument);
-void TraceTask_start(void *argument);
-void Dispecer_start(void *argument);
-void radioComms_start(void *argument);
-void d2start(void *argument);
+void StartTaskBlinky(void *argument);
+void StartTaskTrace(void *argument);
+void StartTaskDispecer(void *argument);
+void StartTaskRadioComms(void *argument);
+void StartTaskWaitForTrigg(void *argument);
 void d3start(void *argument);
 void d4start(void *argument);
 void d5s(void *argument);
 void d6start(void *argument);
-void HwI2C_start(void *argument);
-void HwSpi_start(void *argument);
-void DigitalIn_start(void *argument);
-void AnalogIn_start(void *argument);
+void StartTaskHwi2c(void *argument);
+void StartTaskHwSpi(void *argument);
+void StartTaskDigitalIn(void *argument);
+void StartTaskAnalogIn(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -263,20 +300,20 @@ int main(void)
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-  /* creation of taskBlinky */
-  taskBlinkyHandle = osThreadNew(Blinky_start, NULL, &taskBlinky_attributes);
+  /* creation of TaskBlinky */
+  TaskBlinkyHandle = osThreadNew(StartTaskBlinky, NULL, &TaskBlinky_attributes);
 
-  /* creation of taskTrace */
-  taskTraceHandle = osThreadNew(TraceTask_start, NULL, &taskTrace_attributes);
+  /* creation of TaskTrace */
+  TaskTraceHandle = osThreadNew(StartTaskTrace, NULL, &TaskTrace_attributes);
 
-  /* creation of taskDispecer */
-  taskDispecerHandle = osThreadNew(Dispecer_start, NULL, &taskDispecer_attributes);
+  /* creation of TaskDispecer */
+  TaskDispecerHandle = osThreadNew(StartTaskDispecer, NULL, &TaskDispecer_attributes);
 
-  /* creation of taskRadioComms */
-  taskRadioCommsHandle = osThreadNew(radioComms_start, NULL, &taskRadioComms_attributes);
+  /* creation of TaskRadioComms */
+  TaskRadioCommsHandle = osThreadNew(StartTaskRadioComms, NULL, &TaskRadioComms_attributes);
 
-  /* creation of d2 */
-  d2Handle = osThreadNew(d2start, NULL, &d2_attributes);
+  /* creation of TaskWaitForTrigg */
+  TaskWaitForTriggHandle = osThreadNew(StartTaskWaitForTrigg, NULL, &TaskWaitForTrigg_attributes);
 
   /* creation of d3 */
   d3Handle = osThreadNew(d3start, NULL, &d3_attributes);
@@ -290,21 +327,34 @@ int main(void)
   /* creation of d6 */
   d6Handle = osThreadNew(d6start, NULL, &d6_attributes);
 
-  /* creation of taskHwI2c */
-  taskHwI2cHandle = osThreadNew(HwI2C_start, NULL, &taskHwI2c_attributes);
+  /* creation of TaskHwi2c */
+  TaskHwi2cHandle = osThreadNew(StartTaskHwi2c, NULL, &TaskHwi2c_attributes);
 
-  /* creation of taskHwSpi */
-  taskHwSpiHandle = osThreadNew(HwSpi_start, NULL, &taskHwSpi_attributes);
+  /* creation of TaskHwSpi */
+  TaskHwSpiHandle = osThreadNew(StartTaskHwSpi, NULL, &TaskHwSpi_attributes);
 
-  /* creation of taskDigitalIn */
-  taskDigitalInHandle = osThreadNew(DigitalIn_start, NULL, &taskDigitalIn_attributes);
+  /* creation of TaskDigitalIn */
+  TaskDigitalInHandle = osThreadNew(StartTaskDigitalIn, NULL, &TaskDigitalIn_attributes);
 
-  /* creation of taskAnalogIn */
-  taskAnalogInHandle = osThreadNew(AnalogIn_start, NULL, &taskAnalogIn_attributes);
+  /* creation of TaskAnalogIn */
+  TaskAnalogInHandle = osThreadNew(StartTaskAnalogIn, NULL, &TaskAnalogIn_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
 	/* add threads, ... */
   /* USER CODE END RTOS_THREADS */
+
+  /* Create the event(s) */
+  /* creation of EvtMeasurementStart */
+  EvtMeasurementStartHandle = osEventFlagsNew(&EvtMeasurementStart_attributes);
+
+  /* creation of EvtMeasurementDone */
+  EvtMeasurementDoneHandle = osEventFlagsNew(&EvtMeasurementDone_attributes);
+
+  /* creation of EvtSpare1 */
+  EvtSpare1Handle = osEventFlagsNew(&EvtSpare1_attributes);
+
+  /* creation of EvtSpare2 */
+  EvtSpare2Handle = osEventFlagsNew(&EvtSpare2_attributes);
 
   /* USER CODE BEGIN RTOS_EVENTS */
 	/* add events, ... */
@@ -801,7 +851,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(EXTI4_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -812,12 +862,12 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-	uint32_t fl = (uint32_t) GPIO_Pin;
-	osThreadFlagsSet(taskDigitalInHandle, fl); // prosledim broj pina kao da je flag, pa neka tamo dalje odlucuju
+	// uint32_t fl = (uint32_t) GPIO_Pin;
+	osThreadFlagsSet(TaskDispecerHandle, flg_DIGITAL_IRQ);				// desio se EXTI
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
-	osThreadFlagsSet(taskAnalogInHandle, 0xf000);		// TODO daj neki smisleni fleg
+	osThreadFlagsSet(TaskDispecerHandle, flg_ADC_CONV_CPLT_IRQ);		// ADC merenje zavrseno u pozadini
 }
 
 
@@ -830,27 +880,26 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-  /* USER CODE BEGIN 5 */
+void StartDefaultTask(void *argument) {
+	/* USER CODE BEGIN 5 */
 	/* Infinite loop */
 	for (;;) {
-		osDelay(1);
+		osDelay(100);
 	}
-  /* USER CODE END 5 */
+	/* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_Blinky_start */
+/* USER CODE BEGIN Header_StartTaskBlinky */
 /**
-* @brief Function implementing the blinky thread.
+* @brief Function implementing the TaskBlinky thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_Blinky_start */
-void Blinky_start(void *argument)
+/* USER CODE END Header_StartTaskBlinky */
+void StartTaskBlinky(void *argument)
 {
-  /* USER CODE BEGIN Blinky_start */
-	/* Infinite loop */
+  /* USER CODE BEGIN StartTaskBlinky */
+  /* Infinite loop */
 	for (;;) {
 		uint32_t flg = osThreadFlagsWait(UINT32_MAX, osFlagsWaitAny, cfg_GetHw_HbPer());
 		if (flg == osFlagsErrorTimeout) {
@@ -860,75 +909,97 @@ void Blinky_start(void *argument)
 		}
 		osDelay(1);
 	}
-  /* USER CODE END Blinky_start */
+  /* USER CODE END StartTaskBlinky */
 }
 
-/* USER CODE BEGIN Header_TraceTask_start */
+/* USER CODE BEGIN Header_StartTaskTrace */
 /**
-* @brief Function implementing the traceTask thread.
+* @brief Function implementing the TaskTrace thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_TraceTask_start */
-void TraceTask_start(void *argument)
+/* USER CODE END Header_StartTaskTrace */
+void StartTaskTrace(void *argument)
 {
-  /* USER CODE BEGIN TraceTask_start */
-	/* Infinite loop */
-	for (;;) {
-		osDelay(1);
-	}
-  /* USER CODE END TraceTask_start */
+  /* USER CODE BEGIN StartTaskTrace */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTaskTrace */
 }
 
-/* USER CODE BEGIN Header_Dispecer_start */
+/* USER CODE BEGIN Header_StartTaskDispecer */
 /**
-* @brief Function implementing the dispecer thread.
+* @brief Function implementing the TaskDispecer thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_Dispecer_start */
-void Dispecer_start(void *argument)
+/* USER CODE END Header_StartTaskDispecer */
+void StartTaskDispecer(void *argument)
 {
-  /* USER CODE BEGIN Dispecer_start */
-	/* Infinite loop */
-	for (;;) {
-		osDelay(1);
-	}
-  /* USER CODE END Dispecer_start */
+  /* USER CODE BEGIN StartTaskDispecer */
+  /* Infinite loop */
+  for(;;){
+  	uint32_t rez = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, osWaitForever);
+  	switch (rez) {
+  		case osFlagsErrorTimeout:
+  			// za sada nista
+  			break;
+
+  		default:
+  			osThreadFlagsSet(TaskDigitalInHandle, flg_DIGITAL_REQUEST);
+  			osThreadFlagsSet(TaskAnalogInHandle, flg_ADC_REQUEST);
+  			break;
+  	}
+  	osDelay(1);
+  	osThreadYield();
+
+  }
+  /* USER CODE END StartTaskDispecer */
 }
 
-/* USER CODE BEGIN Header_radioComms_start */
+/* USER CODE BEGIN Header_StartTaskRadioComms */
 /**
-* @brief Function implementing the radioComms thread.
+* @brief Function implementing the TaskRadioComms thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_radioComms_start */
-void radioComms_start(void *argument)
+/* USER CODE END Header_StartTaskRadioComms */
+void StartTaskRadioComms(void *argument)
 {
-  /* USER CODE BEGIN radioComms_start */
-	/* Infinite loop */
-	for (;;) {
-		osDelay(1);
-	}
-  /* USER CODE END radioComms_start */
+  /* USER CODE BEGIN StartTaskRadioComms */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTaskRadioComms */
 }
 
-/* USER CODE BEGIN Header_d2start */
+/* USER CODE BEGIN Header_StartTaskWaitForTrigg */
 /**
-* @brief Function implementing the d2 thread.
+* @brief Function implementing the TaskWaitForTrigg thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_d2start */
-void d2start(void *argument)
-{
-  /* USER CODE BEGIN d2start */
+/* USER CODE END Header_StartTaskWaitForTrigg */
+void StartTaskWaitForTrigg(void *argument) {
+	/* USER CODE BEGIN StartTaskWaitForTrigg */
 	/* Infinite loop */
 	for (;;) {
-		osDelay(1);
+		// rezult = osEventFlagsWait(EvtMeasurementDoneHandle, 0x7fffFFFF, osFlagsWaitAny, osWaitForever);
+		// if (rezult & 0x80000000U) {
+		// 	// Handle Error (e.g., osFlagsErrorTimeout) TODO
+		//
+		// } else {
+		// 	// Use the result safely
+		// 	uint32_t cleanFlags = rezult & 0x7FFFFFFFU;
+		// }
+		osDelay(10);
 	}
-  /* USER CODE END d2start */
+	/* USER CODE END StartTaskWaitForTrigg */
 }
 
 /* USER CODE BEGIN Header_d3start */
@@ -999,109 +1070,155 @@ void d6start(void *argument)
   /* USER CODE END d6start */
 }
 
-/* USER CODE BEGIN Header_HwI2C_start */
+/* USER CODE BEGIN Header_StartTaskHwi2c */
 /**
-* @brief Function implementing the hwi2c thread.
+* @brief Function implementing the TaskHwi2c thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_HwI2C_start */
-void HwI2C_start(void *argument)
+/* USER CODE END Header_StartTaskHwi2c */
+void StartTaskHwi2c(void *argument)
 {
-  /* USER CODE BEGIN HwI2C_start */
-	/* Infinite loop */
-	for (;;) {
-		osDelay(1);
-	}
-  /* USER CODE END HwI2C_start */
+  /* USER CODE BEGIN StartTaskHwi2c */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTaskHwi2c */
 }
 
-/* USER CODE BEGIN Header_HwSpi_start */
+/* USER CODE BEGIN Header_StartTaskHwSpi */
 /**
-* @brief Function implementing the hwspi thread.
+* @brief Function implementing the TaskHwSpi thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_HwSpi_start */
-void HwSpi_start(void *argument)
+/* USER CODE END Header_StartTaskHwSpi */
+void StartTaskHwSpi(void *argument)
 {
-  /* USER CODE BEGIN HwSpi_start */
-	/* Infinite loop */
-	for (;;) {
-		osDelay(1);
-	}
-  /* USER CODE END HwSpi_start */
+  /* USER CODE BEGIN StartTaskHwSpi */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTaskHwSpi */
 }
 
-/* USER CODE BEGIN Header_DigitalIn_start */
+/* USER CODE BEGIN Header_StartTaskDigitalIn */
 /**
-* @brief Function implementing the taskDigitalIn thread.
+* @brief Function implementing the TaskDigitalIn thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_DigitalIn_start */
-void DigitalIn_start(void *argument)
+/* USER CODE END Header_StartTaskDigitalIn */
+void StartTaskDigitalIn(void *argument)
 {
-  /* USER CODE BEGIN DigitalIn_start */
-		uint32_t extPinovi;
-	/* Infinite loop */
+  /* USER CODE BEGIN StartTaskDigitalIn */
+	// ovde se dolazi iz HAL_GPIO_EXTI_Callback
+	// irq callback salje broj pina kao thread flag
+	uint32_t extPinovi;
+  /* Infinite loop */
 	for (;;) {
-		uint32_t rez = osThreadFlagsWait(UINT32_MAX, osFlagsWaitAny, osWaitForever);
+		uint32_t rez = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, osWaitForever);
+		uint32_t prethodni;
 		switch (rez) {
 			case osFlagsErrorTimeout:
 				// ni jedan digitalni ulaz se nije promenio. ne radim nista
 				break;
 
-			default:
+				default:
+				// bilo koji flag -> primio sam EXTI sa nekog digitalnog pina ili je trazeno merenje zbog promene na ANALOGNOM delu
+				// procitam vrednosti i posaljem u measurement set
 				extPinovi = HAL_GPIO_ReadPin(Exti_d1_GPIO_Port, Exti_d1_Pin);
 				extPinovi &= HAL_GPIO_ReadPin(Exti_d2_GPIO_Port, Exti_d2_Pin);
 				extPinovi &= HAL_GPIO_ReadPin(Exti_d3_GPIO_Port, Exti_d3_Pin);
-				setDigital(extPinovi);
+				prethodni = getDigitalResult();
+				if (prethodni == extPinovi) {
+					osEventFlagsClear(EvtMeasurementDoneHandle, flg_DIGITAL_TRIGGERED);
+				} else {
+					setDigitalResult(extPinovi);
+					osEventFlagsSet(EvtMeasurementDoneHandle, flg_DIGITAL_TRIGGERED);
+				}
+				osEventFlagsSet(EvtMeasurementDoneHandle, flg_DIGITAL_PROCESSING_DONE);				// signaliziram zavrsetak
 				break;
 		}
 		osDelay(1);
 		osThreadYield();
 	}
-  /* USER CODE END DigitalIn_start */
+  /* USER CODE END StartTaskDigitalIn */
 }
 
-/* USER CODE BEGIN Header_AnalogIn_start */
+/* USER CODE BEGIN Header_StartTaskAnalogIn */
 /**
-* @brief Function implementing the taskAnalogIn thread.
+* @brief Function implementing the TaskAnalogIn thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_AnalogIn_start */
-void AnalogIn_start(void *argument)
+/* USER CODE END Header_StartTaskAnalogIn */
+void StartTaskAnalogIn(void *argument)
 {
-  /* USER CODE BEGIN AnalogIn_start */
+  /* USER CODE BEGIN StartTaskAnalogIn */
 	uint32_t AD_REZULT[hadc1.Init.NbrOfConversion];
-for (;;) {
+  /* Infinite loop */
+	for (;;) {
 
-	uint32_t flg = osThreadFlagsWait(UINT32_MAX, osFlagsWaitAny, ADC_REPETITION_PERIOD_mS);
-	// kad istekne ADC_REPETITION_PERIOD_mS ili ako pre vremena dobijem fleg, startujem merenje
-	switch (flg) {
-		case osFlagsErrorTimeout:
-			// startujem merenje jer je istekao ADC_REPETITION_PERIOD_mS
-			HAL_ADC_Start_DMA(&hadc1, AD_REZULT, hadc1.Init.NbrOfConversion);	// posle ovoga cekam DMA da zavrsi
-			break;
+		uint32_t flg = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, ADC_REPETITION_PERIOD_mS);
+		// analogno merenje svakih ADC_REPETITION_PERIOD_mS, ili ako pre vremena dobijem fleg zbog nekog drugog trigera
+		switch (flg) {
+			case osFlagsErrorTimeout:
+			case flg_ADC_REQUEST:
+				// ako istekne ADC_REPETITION_PERIOD_mS ili neki drugi task zatrazi merenje
+				HAL_ADC_Start_DMA(&hadc1, AD_REZULT, hadc1.Init.NbrOfConversion);	// posle ovoga cekam DMA da zavrsi
+				break;
 
-		case flg_ADC_DONE:
-			// ADC_DMA transfer je zavrsen
-			for (int i = 0; i < hadc1.Init.NbrOfConversion; i++) {
-				setAnalog(i, AD_REZULT[i]);
-			}
-			break;
+			case flg_ADC_CONV_CPLT_IRQ:
+				// ADC_DMA transfer je zavrsen
+				bool desioSeTrig;
+				desioSeTrig = false;		// FREEZE: ovde setujem varijablu a tek na kraju SAMO JEDNOM SETUJEM thread flag
+				for (int i = 0; i < hadc1.Init.NbrOfConversion; i++) {
+					setAnalogResult(i, AD_REZULT[i]);
 
-		default:
-			// TODO sta ovde? nista?
-			break;
+					// THRESHOLD > 0: alarmiram prekoracenje IZNAD
+					if (AD_THRESHOLD__DEBUG >= 0) {
+						if (AD_REZULT[i] > (AD_THRESHOLD__DEBUG)) {
+							desioSeTrig = true;		// preko thresholda
+						} else if (AD_REZULT[i] <= (AD_THRESHOLD__DEBUG - AD_HYSTERSIS__DEBUG)) {
+							desioSeTrig = false;	// ispod threshold-hyst
+						}
+					}
+
+					// THRESHOLD < 0: alarmiram prekoracenje ISPOD
+					if (AD_THRESHOLD__DEBUG < 0) {
+						if (AD_REZULT[i] < (AD_THRESHOLD__DEBUG)) {
+							desioSeTrig = true;		// preko thresholda
+						} else if (AD_REZULT[i] >= (AD_THRESHOLD__DEBUG + AD_HYSTERSIS__DEBUG)) {
+							desioSeTrig = false;	// ispod threshold-hyst
+						}
+					}
+				}
+
+
+				if (desioSeTrig) {
+					// signaliziraj trigger
+					osEventFlagsSet(EvtMeasurementDoneHandle, flg_ANALOG_TRIGGERED);
+				} else {
+					// nije bio trigger
+					osEventFlagsClear(EvtMeasurementDoneHandle, flg_ANALOG_TRIGGERED);
+				}
+				// konacno signaliziraj zavrseno merenje
+				osEventFlagsSet(EvtMeasurementDoneHandle, flg_ANALOG_PROCESSING_DONE);
+				break;
+
+			default:
+				// TODO sta ovde? nista?
+				break;
+		}
+		osDelay(1);
+		osThreadYield();
 	}
-	osDelay(1);
-	osThreadYield();
-}
-/* Infinite loop */
-  /* USER CODE END AnalogIn_start */
+  /* USER CODE END StartTaskAnalogIn */
 }
 
 /**
