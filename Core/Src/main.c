@@ -942,7 +942,7 @@ void StartTaskBlinky(void *argument)
   /* USER CODE BEGIN StartTaskBlinky */
   /* Infinite loop */
 	for (;;) {
-		uint32_t flg = osThreadFlagsWait(UINT32_MAX, osFlagsWaitAny, cfg_GetHw_HbPer());
+		uint32_t flg = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, cfg_GetHw_HbPer());
 		if (flg == osFlagsErrorTimeout) {
 			// TODO blink heartbeat
 		} else {
@@ -963,9 +963,15 @@ void StartTaskBlinky(void *argument)
 void StartTaskTrace(void *argument)
 {
   /* USER CODE BEGIN StartTaskTrace */
+	char msg[256];
   /* Infinite loop */
-  for(;;)
-  {
+  for(;;) {
+  	osMessageQueueGet(qTraceExecutionHandle, &msg, nullptr, osWaitForever);
+  	HAL_UART_Transmit(&huart1, (uint8_t *)msg, sizeof(&msg), 200);	// ako nije gotovo za 200mS batali tracing
+  	while (CDC_Transmit_FS(msg, sizeof(&msg)) == USBD_BUSY) {
+  		// Optional: add a timeout or delay to prevent infinite hanging
+  		HAL_Delay(1);
+  	}
     osDelay(1);
   }
   /* USER CODE END StartTaskTrace */
