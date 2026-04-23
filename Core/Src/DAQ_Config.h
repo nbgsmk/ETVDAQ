@@ -6,7 +6,7 @@
 #define ETVDAQ_DAQ_CONFIG_H
 #include <stdint.h>
 
-uint32_t cfg_GetHw_HbPer(void);
+uint32_t cfg_GetHw_HeartbeatPer(void);
 void cfg_SetHw_HbPer(uint32_t period_mS);
 
 #endif //ETVDAQ_DAQ_CONFIG_H

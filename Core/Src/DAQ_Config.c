@@ -7,7 +7,7 @@
 
 uint32_t HW_HeartBeat_per_mS = 5 * 1000U;		// hardware heartbeat za led diodu
 
-uint32_t cfg_GetHw_HbPer() {
+uint32_t cfg_GetHw_HeartbeatPer() {
 	return HW_HeartBeat_per_mS;
 }
 

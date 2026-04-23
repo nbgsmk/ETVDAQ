@@ -178,10 +178,10 @@ osMessageQueueId_t qRadioFwdHandle;
 const osMessageQueueAttr_t qRadioFwd_attributes = {
   .name = "qRadioFwd"
 };
-/* Definitions for mutxRadioTx */
-osMutexId_t mutxRadioTxHandle;
-const osMutexAttr_t mutxRadioTx_attributes = {
-  .name = "mutxRadioTx"
+/* Definitions for mtxMeasCnt */
+osMutexId_t mtxMeasCntHandle;
+const osMutexAttr_t mtxMeasCnt_attributes = {
+  .name = "mtxMeasCnt"
 };
 /* Definitions for EvtTrace */
 osEventFlagsId_t EvtTraceHandle;
@@ -208,6 +208,9 @@ const osEventFlagsAttr_t EvtSpare2_attributes = {
 constexpr uint32_t qmsgLen = 2048;		// maksimalna duzina moruke u msgQueue
 constexpr uint32_t qWt = 10;			// wait za upis u queue
 constexpr uint32_t trcWt = 100;			// timeout za uart i usb trace facility
+constexpr uint32_t allMeasTmout = 2000;	// timeout da se zavrse sva merenja
+uint32_t measCnt = 0;
+
 // maksimalni flegovi
 uint32_t flg_MAX = 0x7FFFFFFFU;
 // ovi se salju dispeceru
@@ -307,8 +310,8 @@ int main(void)
   /* Init scheduler */
   osKernelInitialize();
   /* Create the mutex(es) */
-  /* creation of mutxRadioTx */
-  mutxRadioTxHandle = osMutexNew(&mutxRadioTx_attributes);
+  /* creation of mtxMeasCnt */
+  mtxMeasCntHandle = osMutexNew(&mtxMeasCnt_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
 	/* add mutexes, ... */
@@ -875,14 +878,11 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-	// uint32_t fl = (uint32_t) GPIO_Pin;
 	osThreadFlagsSet(TaskDispecerHandle, flg_DIGITAL_IRQ);
-	// osEventFlagsSet(EvtTriggersHandle, flg_DIGITAL_IRQ);			// desio se EXTI
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	osThreadFlagsSet(TaskDispecerHandle, flg_ADC_CONV_CPLT_IRQ);		// ADC merenje zavrseno u pozadini
-	// osEventFlagsSet(EvtTriggersHandle, flg_ADC_CONV_CPLT_IRQ);		// ADC merenje zavrseno u pozadini
 }
 
 
@@ -919,7 +919,7 @@ void StartTaskBlinky(void *argument)
   /* USER CODE BEGIN StartTaskBlinky */
   /* Infinite loop */
 	for (;;) {
-		uint32_t flg = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, cfg_GetHw_HbPer());
+		uint32_t flg = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, cfg_GetHw_HeartbeatPer());
 		if (flg == osFlagsErrorTimeout) {
 			// TODO blink heartbeat
 		} else {
@@ -972,27 +972,32 @@ void StartTaskTrace(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartTaskDispecer */
-void StartTaskDispecer(void *argument)
-{
-  /* USER CODE BEGIN StartTaskDispecer */
-  /* Infinite loop */
-  for(;;){
-  	uint32_t rez = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, osWaitForever);
-  	switch (rez) {
-  		case osFlagsErrorTimeout:
-  			// za sada nista
-  			break;
+void StartTaskDispecer(void *argument) {
+	/* USER CODE BEGIN StartTaskDispecer */
+	/* Infinite loop */
+	for (;;) {
+		uint32_t rez = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, osWaitForever);
+		switch (rez) {
+			case osFlagsErrorTimeout:
+				// za sada nista
+				break;
 
-  		default:
-  			osThreadFlagsSet(TaskDigitalInHandle, flg_DIGITAL_REQUEST);
-  			osThreadFlagsSet(TaskAnalogInHandle, flg_ADC_REQUEST);
-  			break;
-  	}
-  	osDelay(1);
-  	osThreadYield();
+			default:
+				// koliko god taskova ima
+				osMutexAcquire(mtxMeasCntHandle, osWaitForever);
+				measCnt++;
+				osThreadFlagsSet(TaskDigitalInHandle, flg_DIGITAL_REQUEST);
+				measCnt++;
+				osThreadFlagsSet(TaskAnalogInHandle, flg_ADC_REQUEST);
+				osDelay(2);		// dajem sansu da taskovi za merenja krenu
+				osMutexRelease(mtxMeasCntHandle);
+				break;
+		}
 
-  }
-  /* USER CODE END StartTaskDispecer */
+		osDelay(1);
+		osThreadYield();
+	}
+	/* USER CODE END StartTaskDispecer */
 }
 
 /* USER CODE BEGIN Header_StartTaskRadioComms */
@@ -1005,11 +1010,30 @@ void StartTaskDispecer(void *argument)
 void StartTaskRadioComms(void *argument)
 {
   /* USER CODE BEGIN StartTaskRadioComms */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+	uint32_t rez = 0;
+	constexpr char rad_txOn[] = "radio tx on";
+	constexpr char rad_txOnIncplt[] = "radio tx will be done with incomplete measurements";
+	constexpr char rad_txOff[] = "radio tx done";
+	/* Infinite loop */
+	for (;;) {
+		// cekam da neko zada start
+		rez = osEventFlagsWait(EvtTriggersHandle, flg_MAX, osFlagsNoClear | osFlagsWaitAny, allMeasTmout);
+		// zatim cekam da sva merenja zavrse
+		osMutexAcquire(mtxMeasCntHandle, osWaitForever);
+		if (rez == osErrorTimeout) {
+			// posalji sta imas, cak i ako se nisu svi senzori odazvali na vreme (mozda zbog kvara?)
+			osMessageQueuePut(qTraceExecHandle, rad_txOnIncplt, 0U, qWt);
+			osMessageQueuePut(qTraceExecHandle, rad_txOn, 0U, qWt);
+			// TODO RADIO SEND pritom obavezno signaliziraj neku gresku
+			osMessageQueuePut(qTraceExecHandle, rad_txOff, 0U, qWt);
+		} else {
+			osMessageQueuePut(qTraceExecHandle, rad_txOn, 0U, qWt);
+			// TODO RADIO SEND
+			osMessageQueuePut(qTraceExecHandle, rad_txOff, 0U, qWt);
+		}
+		osDelay(1);
+		osThreadYield();
+	}
   /* USER CODE END StartTaskRadioComms */
 }
 
@@ -1180,8 +1204,12 @@ void StartTaskDigitalIn(void *argument)
 					osEventFlagsSet(EvtTriggersHandle, flg_DIGITAL_TRIGGERED);
 					osMessageQueuePut(qTraceExecHandle, (uint8_t *)dig_trig, 0U, qWt);
 				}
-				osEventFlagsSet(EvtTriggersHandle, flg_DIGITAL_PROCESSING_DONE);				// signaliziram zavrsetak
 				osMessageQueuePut(qTraceExecHandle, (uint8_t *)dig_complete, 0U, qWt);
+				osEventFlagsSet(EvtTriggersHandle, flg_DIGITAL_PROCESSING_DONE);				// signaliziram zavrsetak
+				osMutexAcquire(mtxMeasCntHandle, osWaitForever);
+				measCnt--;
+				osMutexRelease(mtxMeasCntHandle);
+
 				break;
 		}
 		osDelay(1);
@@ -1242,16 +1270,19 @@ void StartTaskAnalogIn(void *argument)
 
 
 				if (desioSeTrig) {
-					// signaliziraj trigger
-					osEventFlagsSet(EvtTriggersHandle, flg_ANALOG_TRIGGERED);
+					// ostavi poruku i signaliziraj trigger
 					osMessageQueuePut(qTraceExecHandle, (uint8_t *)adc_trig, 0U, qWt);
+					osEventFlagsSet(EvtTriggersHandle, flg_ANALOG_TRIGGERED);
 				} else {
 					// nije bio trigger
 					osEventFlagsClear(EvtTriggersHandle, flg_ANALOG_TRIGGERED);
 				}
 				// konacno signaliziraj zavrseno merenje
-				osEventFlagsSet(EvtTriggersHandle, flg_ANALOG_PROCESSING_DONE);
 				osMessageQueuePut(qTraceExecHandle, (uint8_t *)adc_complete, 0U, qWt);
+				osEventFlagsSet(EvtTriggersHandle, flg_ANALOG_PROCESSING_DONE);
+				osMutexAcquire(mtxMeasCntHandle, osWaitForever);
+				measCnt--;
+				osMutexRelease(mtxMeasCntHandle);
 				break;
 
 			default:
