@@ -19,13 +19,14 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdbool.h>
 #include <sys/stat.h>
 #include "Merenja.h"
 #include "DAQ_Config.h"
+#include "usbd_cdc_if.h"
 
 /* USER CODE END Includes */
 
@@ -157,10 +158,10 @@ const osThreadAttr_t TaskAnalogIn_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for qTraceExecution */
-osMessageQueueId_t qTraceExecutionHandle;
-const osMessageQueueAttr_t qTraceExecution_attributes = {
-  .name = "qTraceExecution"
+/* Definitions for qTraceExec */
+osMessageQueueId_t qTraceExecHandle;
+const osMessageQueueAttr_t qTraceExec_attributes = {
+  .name = "qTraceExec"
 };
 /* Definitions for qRadioTx */
 osMessageQueueId_t qRadioTxHandle;
@@ -182,15 +183,15 @@ osMutexId_t mutxRadioTxHandle;
 const osMutexAttr_t mutxRadioTx_attributes = {
   .name = "mutxRadioTx"
 };
-/* Definitions for EvtMeasurementStart */
-osEventFlagsId_t EvtMeasurementStartHandle;
-const osEventFlagsAttr_t EvtMeasurementStart_attributes = {
-  .name = "EvtMeasurementStart"
+/* Definitions for EvtTrace */
+osEventFlagsId_t EvtTraceHandle;
+const osEventFlagsAttr_t EvtTrace_attributes = {
+  .name = "EvtTrace"
 };
-/* Definitions for EvtMeasurementDone */
-osEventFlagsId_t EvtMeasurementDoneHandle;
-const osEventFlagsAttr_t EvtMeasurementDone_attributes = {
-  .name = "EvtMeasurementDone"
+/* Definitions for EvtTriggers */
+osEventFlagsId_t EvtTriggersHandle;
+const osEventFlagsAttr_t EvtTriggers_attributes = {
+  .name = "EvtTriggers"
 };
 /* Definitions for EvtSpare1 */
 osEventFlagsId_t EvtSpare1Handle;
@@ -204,22 +205,25 @@ const osEventFlagsAttr_t EvtSpare2_attributes = {
 };
 /* USER CODE BEGIN PV */
 
+constexpr uint32_t qmsgLen = 2048;		// maksimalna duzina moruke u msgQueue
+constexpr uint32_t qWt = 10;			// wait za upis u queue
+constexpr uint32_t trcWt = 100;			// timeout za uart i usb trace facility
 // maksimalni flegovi
 uint32_t flg_MAX = 0x7FFFFFFFU;
 // ovi se salju dispeceru
-#define flg_DIGITAL_IRQ					0x0000'0000'00000001			// EXTI callback: digitalni ulaz se promenio
-#define flg_DIGITAL_REQUEST				0x0000'0000'00000010			// neki task zahteva ocitavanje digitalnih ulaza
-#define flg_DIGITAL_PROCESSING_DONE		0x0000'0000'00000100			// svi digitalni pinovi procitani i spremni za slanje
-#define flg_DIGITAL_TRIGGERED			0x0000'0000'00001000			// svi digitalni pinovi procitani i spremni za slanje
+#define flg_DIGITAL_IRQ					(1 << 0)	// EXTI callback: digitalni ulaz se promenio
+#define flg_DIGITAL_REQUEST				(1 << 1)	// neki task zahteva ocitavanje digitalnih ulaza
+#define flg_DIGITAL_PROCESSING_DONE		(1 << 2) 	// svi digitalni pinovi procitani i spremni za slanje
+#define flg_DIGITAL_TRIGGERED			(1 << 3) 	// svi digitalni pinovi procitani i spremni za slanje
 
-#define flg_ADC_CONV_CPLT_IRQ			0x0000'0000'00010010			// ADC IRQ callback: zavrsena adc konverzija u pozadini i DMA je obavio svoje
-#define flg_ADC_REQUEST					0x0000'0000'00100000			// neki task zahteva adc konverziju
-#define flg_ANALOG_PROCESSING_DONE		0x0000'0000'01000000			// zavrsena analogna merenja ali ni jedan threshold nije prekoracen
-#define flg_ANALOG_TRIGGERED			0x0000'0000'10000000			// zavrsena analogna merenja i neka vrednost je prekoracena
-#define evtflg_SPARE1_TRIGGER			0x
-#define evtflg_SPARE2_TRIGGER			0x
-#define evtflg_SPARE3_TRIGGER			0x
-#define evtflg_SPARE4_TRIGGER			0x
+#define flg_ADC_CONV_CPLT_IRQ			(1 << 4)		// ADC IRQ callback: zavrsena adc konverzija u pozadini i DMA je obavio svoje
+#define flg_ADC_REQUEST					(1 << 5)		// neki task zahteva adc konverziju
+#define flg_ANALOG_PROCESSING_DONE		(1 << 6)		// zavrsena analogna merenja ali ni jedan threshold nije prekoracen
+#define flg_ANALOG_TRIGGERED			(1 << 7)		// zavrsena analogna merenja i neka vrednost je prekoracena
+#define evtflg_SPARE1_TRIGGER			(1 << 8)
+#define evtflg_SPARE2_TRIGGER			(1 << 9)
+#define evtflg_SPARE3_TRIGGER			(1 << 10)
+#define evtflg_SPARE4_TRIGGER			(1 << 11)
 
 
 /* USER CODE END PV */
@@ -235,7 +239,6 @@ static void MX_RTC_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_USB_OTG_FS_USB_Init(void);
 void StartDefaultTask(void *argument);
 void StartTaskBlinky(void *argument);
 void StartTaskTrace(void *argument);
@@ -297,7 +300,6 @@ int main(void)
   MX_SPI2_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
-  MX_USB_OTG_FS_USB_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -321,8 +323,8 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
-  /* creation of qTraceExecution */
-  qTraceExecutionHandle = osMessageQueueNew (200, sizeof(uint32_t), &qTraceExecution_attributes);
+  /* creation of qTraceExec */
+  qTraceExecHandle = osMessageQueueNew (200, sizeof(uint32_t), &qTraceExec_attributes);
 
   /* creation of qRadioTx */
   qRadioTxHandle = osMessageQueueNew (100, sizeof(uint32_t), &qRadioTx_attributes);
@@ -384,11 +386,11 @@ int main(void)
 	/* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
-  /* creation of EvtMeasurementStart */
-  EvtMeasurementStartHandle = osEventFlagsNew(&EvtMeasurementStart_attributes);
+  /* creation of EvtTrace */
+  EvtTraceHandle = osEventFlagsNew(&EvtTrace_attributes);
 
-  /* creation of EvtMeasurementDone */
-  EvtMeasurementDoneHandle = osEventFlagsNew(&EvtMeasurementDone_attributes);
+  /* creation of EvtTriggers */
+  EvtTriggersHandle = osEventFlagsNew(&EvtTriggers_attributes);
 
   /* creation of EvtSpare1 */
   EvtSpare1Handle = osEventFlagsNew(&EvtSpare1_attributes);
@@ -790,27 +792,6 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
-  * @brief USB_OTG_FS Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USB_OTG_FS_USB_Init(void)
-{
-
-  /* USER CODE BEGIN USB_OTG_FS_Init 0 */
-
-  /* USER CODE END USB_OTG_FS_Init 0 */
-
-  /* USER CODE BEGIN USB_OTG_FS_Init 1 */
-
-  /* USER CODE END USB_OTG_FS_Init 1 */
-  /* USER CODE BEGIN USB_OTG_FS_Init 2 */
-
-  /* USER CODE END USB_OTG_FS_Init 2 */
-
-}
-
-/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -882,14 +863,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA10 PA11 PA12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF10_OTG_FS;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI4_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI4_IRQn);
@@ -903,11 +876,13 @@ static void MX_GPIO_Init(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	// uint32_t fl = (uint32_t) GPIO_Pin;
-	osThreadFlagsSet(TaskDispecerHandle, flg_DIGITAL_IRQ);				// desio se EXTI
+	osThreadFlagsSet(TaskDispecerHandle, flg_DIGITAL_IRQ);
+	// osEventFlagsSet(EvtTriggersHandle, flg_DIGITAL_IRQ);			// desio se EXTI
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	osThreadFlagsSet(TaskDispecerHandle, flg_ADC_CONV_CPLT_IRQ);		// ADC merenje zavrseno u pozadini
+	// osEventFlagsSet(EvtTriggersHandle, flg_ADC_CONV_CPLT_IRQ);		// ADC merenje zavrseno u pozadini
 }
 
 
@@ -922,6 +897,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
+  /* init code for USB_DEVICE */
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
 	/* Infinite loop */
 	for (;;) {
@@ -963,16 +940,27 @@ void StartTaskBlinky(void *argument)
 void StartTaskTrace(void *argument)
 {
   /* USER CODE BEGIN StartTaskTrace */
-	char msg[256];
+	char msg[qmsgLen];
+	HAL_StatusTypeDef stat;
+	uint32_t cdcTo;
   /* Infinite loop */
   for(;;) {
-  	osMessageQueueGet(qTraceExecutionHandle, &msg, nullptr, osWaitForever);
-  	HAL_UART_Transmit(&huart1, (uint8_t *)msg, sizeof(&msg), 200);	// ako nije gotovo za 200mS batali tracing
-  	while (CDC_Transmit_FS(msg, sizeof(&msg)) == USBD_BUSY) {
-  		// Optional: add a timeout or delay to prevent infinite hanging
-  		HAL_Delay(1);
+  	osMessageQueueGet(qTraceExecHandle, &msg, 0U, osWaitForever);
+  	stat = HAL_UART_Transmit(&huart1, (uint8_t *)msg, sizeof(msg), trcWt);	// ako nije gotovo za 200mS batali tracing
+  	if (stat != HAL_OK) {
+  		// TODO kome signalizirati ako UART trejser ne radi!
+  	}
+  	cdcTo = 0;
+  	while ( (cdcTo<trcWt) && ( CDC_Transmit_FS((uint8_t *)msg, sizeof(msg))==USBD_BUSY )
+  		) {
+  		osDelay(1);
+  		cdcTo++;
+  		if (cdcTo >= trcWt) {
+  			// TODO kome signalizirati ako ni USB trejser ne radi!
+  		}
   	}
     osDelay(1);
+  	osThreadYield();
   }
   /* USER CODE END StartTaskTrace */
 }
@@ -1166,11 +1154,13 @@ void StartTaskDigitalIn(void *argument)
   /* USER CODE BEGIN StartTaskDigitalIn */
 	// ovde se dolazi iz HAL_GPIO_EXTI_Callback
 	// irq callback salje broj pina kao thread flag
-	uint32_t extPinovi;
+	uint32_t extPinovi = 0;
+	uint32_t prethodniPinovi = 0;
+	constexpr char dig_trig[] = "digital triggered";
+	constexpr char dig_complete[] = "digital completed";
   /* Infinite loop */
 	for (;;) {
 		uint32_t rez = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, osWaitForever);
-		uint32_t prethodni;
 		switch (rez) {
 			case osFlagsErrorTimeout:
 				// ni jedan digitalni ulaz se nije promenio. ne radim nista
@@ -1182,14 +1172,16 @@ void StartTaskDigitalIn(void *argument)
 				extPinovi = HAL_GPIO_ReadPin(Exti_d1_GPIO_Port, Exti_d1_Pin);
 				extPinovi &= HAL_GPIO_ReadPin(Exti_d2_GPIO_Port, Exti_d2_Pin);
 				extPinovi &= HAL_GPIO_ReadPin(Exti_d3_GPIO_Port, Exti_d3_Pin);
-				prethodni = getDigitalResult();
-				if (prethodni == extPinovi) {
-					osEventFlagsClear(EvtMeasurementDoneHandle, flg_DIGITAL_TRIGGERED);
+				prethodniPinovi = getDigitalResult();
+				if (prethodniPinovi == extPinovi) {
+					osEventFlagsClear(EvtTriggersHandle, flg_DIGITAL_TRIGGERED);
 				} else {
 					setDigitalResult(extPinovi);
-					osEventFlagsSet(EvtMeasurementDoneHandle, flg_DIGITAL_TRIGGERED);
+					osEventFlagsSet(EvtTriggersHandle, flg_DIGITAL_TRIGGERED);
+					osMessageQueuePut(qTraceExecHandle, (uint8_t *)dig_trig, 0U, qWt);
 				}
-				osEventFlagsSet(EvtMeasurementDoneHandle, flg_DIGITAL_PROCESSING_DONE);				// signaliziram zavrsetak
+				osEventFlagsSet(EvtTriggersHandle, flg_DIGITAL_PROCESSING_DONE);				// signaliziram zavrsetak
+				osMessageQueuePut(qTraceExecHandle, (uint8_t *)dig_complete, 0U, qWt);
 				break;
 		}
 		osDelay(1);
@@ -1209,7 +1201,9 @@ void StartTaskAnalogIn(void *argument)
 {
   /* USER CODE BEGIN StartTaskAnalogIn */
 	uint32_t AD_REZULT[hadc1.Init.NbrOfConversion];
-  /* Infinite loop */
+	constexpr char adc_trig[] = "analog triggered";
+	constexpr char adc_complete[] = "analog completed";
+	/* Infinite loop */
 	for (;;) {
 
 		uint32_t flg = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, ADC_REPETITION_PERIOD_mS);
@@ -1223,8 +1217,7 @@ void StartTaskAnalogIn(void *argument)
 
 			case flg_ADC_CONV_CPLT_IRQ:
 				// ADC_DMA transfer je zavrsen
-				bool desioSeTrig;
-				desioSeTrig = false;		// FREEZE: ovde setujem varijablu a tek na kraju SAMO JEDNOM SETUJEM thread flag
+				bool desioSeTrig = false;		// FREEZE: ovde setujem varijablu a tek na kraju SAMO JEDNOM SETUJEM thread flag
 				for (int i = 0; i < hadc1.Init.NbrOfConversion; i++) {
 					setAnalogResult(i, AD_REZULT[i]);
 
@@ -1250,13 +1243,15 @@ void StartTaskAnalogIn(void *argument)
 
 				if (desioSeTrig) {
 					// signaliziraj trigger
-					osEventFlagsSet(EvtMeasurementDoneHandle, flg_ANALOG_TRIGGERED);
+					osEventFlagsSet(EvtTriggersHandle, flg_ANALOG_TRIGGERED);
+					osMessageQueuePut(qTraceExecHandle, (uint8_t *)adc_trig, 0U, qWt);
 				} else {
 					// nije bio trigger
-					osEventFlagsClear(EvtMeasurementDoneHandle, flg_ANALOG_TRIGGERED);
+					osEventFlagsClear(EvtTriggersHandle, flg_ANALOG_TRIGGERED);
 				}
 				// konacno signaliziraj zavrseno merenje
-				osEventFlagsSet(EvtMeasurementDoneHandle, flg_ANALOG_PROCESSING_DONE);
+				osEventFlagsSet(EvtTriggersHandle, flg_ANALOG_PROCESSING_DONE);
+				osMessageQueuePut(qTraceExecHandle, (uint8_t *)adc_complete, 0U, qWt);
 				break;
 
 			default:
@@ -1300,6 +1295,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
+	osMessageQueuePut(qTraceExecHandle, (uint8_t *)"e jbga, HAL_ERROR! System halted.", 0U, qWt);
 	while (1) {
 	}
   /* USER CODE END Error_Handler_Debug */
