@@ -24,9 +24,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <sys/stat.h>
+#include "usbd_cdc_if.h"
+#include "BoardLed.h"
 #include "Merenja.h"
 #include "DAQ_Config.h"
-#include "usbd_cdc_if.h"
 
 /* USER CODE END Includes */
 
@@ -921,9 +922,9 @@ void StartTaskBlinky(void *argument)
 	for (;;) {
 		uint32_t flg = osThreadFlagsWait(flg_MAX, osFlagsWaitAny, cfg_GetHw_HeartbeatPer());
 		if (flg == osFlagsErrorTimeout) {
-			// TODO blink heartbeat
+			ledBlur(150, 2, 2);
 		} else {
-			// TODO blink nesto drugo
+			ledOnmS(10);
 		}
 		osDelay(1);
 	}

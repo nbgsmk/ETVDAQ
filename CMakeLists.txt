@@ -39,6 +39,10 @@ add_executable(${CMAKE_PROJECT_NAME}
         Core/Src/Merenja.h
         Core/Src/DAQ_Config.c
         Core/Src/DAQ_Config.h
+        Core/Src/BoardLed.c
+        Core/Src/BoardLed.h
+        Core/Src/A.cpp
+        Core/Src/A.h
 
 )
 
